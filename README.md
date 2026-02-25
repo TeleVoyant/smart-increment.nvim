@@ -32,7 +32,7 @@ Using [lazy.nvim](https://github.com/folke/lazy.nvim):
 
 ```lua
 {
-  "your-username/smart-increment.nvim",
+  "TeleVoyant/smart-increment.nvim",
   config = function()
     require("smart-increment").setup()
   end,
@@ -43,7 +43,7 @@ Using [packer.nvim](https://github.com/wbthomason/packer.nvim):
 
 ```lua
 use {
-  "your-username/smart-increment.nvim",
+  "TeleVoyant/smart-increment.nvim",
   config = function()
     require("smart-increment").setup()
   end,
