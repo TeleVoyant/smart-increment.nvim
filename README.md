@@ -99,6 +99,7 @@ require("smart-increment").setup({
   register = '"',            -- register to track (default: unnamed)
   linewise_paste = false,     -- force linewise paste in paste mode
   sr_multi_report = false,    -- show detailed report after S&R multi-line
+  similarity_threshold = 0.5 -- between 0 and 1, for SR_LINE pattern match acceptance
   keymaps = {
     increment_paste = "<leader>ss",   -- false to disable
     reset = "<leader>sS",            -- false to disable

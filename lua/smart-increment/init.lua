@@ -66,6 +66,7 @@ local state = nil
 ---@class SmartIncrementConfig
 ---@field register string register to watch (default: `"`)
 ---@field linewise_paste boolean force linewise paste in paste mode
+---@field similarity_threshold number adjust pattern match strictness in SR_LINE mode (0 to 1, default: 0.5)
 ---@field number_pattern string Lua pattern for matching numbers
 ---@field sr_multi_report boolean show detailed report after SR multi-line (default: false)
 ---@field keymaps SmartIncrementKeymaps
@@ -74,6 +75,7 @@ local state = nil
 local config = {
   register = '"',
   linewise_paste = false,
+  similarity_threshold = 0.5,
   number_pattern = "%-?%d+",
   sr_multi_report = false,
   keymaps = {
@@ -234,7 +236,7 @@ local function similarity(a, b)
 end
 
 --- Minimum similarity threshold for a match to be accepted in SR_LINE mode.
-local SIMILARITY_THRESHOLD = 0.5
+local SIMILARITY_THRESHOLD = config.similarity_threshold
 
 --- Extract the search line from register content.
 --- For multiline registers in S&R modes, uses only the first line and warns.
@@ -741,6 +743,7 @@ end
 ---   register = '"',
 ---   linewise_paste = false,
 ---   sr_multi_report = false,   -- true to show detailed report after S&R multi
+---   similarity_threshold = 0.5 -- between 0 and 1, for SR_LINE pattern match acceptance
 ---   keymaps = {
 ---     increment_paste = "<leader>ss",   -- false to disable
 ---     reset = "<leader>sS",            -- false to disable
