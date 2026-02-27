@@ -177,9 +177,13 @@ local function build_search_pattern(text)
   local last_end = 1
   local capture_count = 0
 
-  for start_pos, num_str, end_pos in text:gmatch("()" .. config.number_pattern .. "()") do
+  local search_start = 1
+  while search_start <= #text do
+    local match_start, match_end = text:find(config.number_pattern, search_start)
+    if not match_start then break end
+
     -- Escape the literal text between numbers.
-    local literal = text:sub(last_end, start_pos - 1)
+    local literal = text:sub(last_end, match_start - 1)
     literal = literal:gsub("([%(%)%.%%%+%-%*%?%[%]%^%$])", "%%%1")
     table.insert(parts, literal)
 
@@ -187,7 +191,9 @@ local function build_search_pattern(text)
     -- (and optional leading minus).
     table.insert(parts, "(%-?%d+)")
     capture_count = capture_count + 1
-    last_end = end_pos
+
+    last_end = match_end + 1
+    search_start = match_end + 1
   end
 
   -- Trailing literal after the last number.
@@ -580,14 +586,14 @@ local function handle_sr_multi(visual_start, visual_end)
 
     local report = table.concat({
       "── smart-increment: detailed report ──",
-      string.format("  Scope          : %s", scope_label),
-      string.format("  Pattern        : %s", search_text),
-      string.format("  Step           : %s%s", direction_label, state.amount),
-      string.format("  Lines scanned  : %d", lines_scanned),
-      string.format("  Lines modified : %d", lines_modified),
-      string.format("  Replacements   : %d", total_replacements),
-      string.format("  Value range    : %s → %s", first_value or "?", current_text),
-      string.format("  Modified       : L%s", line_list),
+      string.format("  Scope        : %s", scope_label),
+      string.format("  Pattern      : %s", search_text),
+      string.format("  Step         : %s%s", direction_label, state.amount),
+      string.format("  Lines scanned: %d", lines_scanned),
+      string.format("  Lines modified: %d", lines_modified),
+      string.format("  Replacements : %d", total_replacements),
+      string.format("  Value range  : %s → %s", first_value or "?", current_text),
+      string.format("  Modified     : L%s", line_list),
     }, "\n")
 
     vim.notify(report, vim.log.levels.INFO)
