@@ -1,0 +1,403 @@
+*smart-increment.txt*  Sequential paste & search-replace with auto-incrementing numbers
+
+Author:  TeleVoyant + smart-increment contributors
+License: MIT
+
+==============================================================================
+CONTENTS                                          *smart-increment-contents*
+
+    1. Introduction .......................... |smart-increment-introduction|
+    2. Requirements .......................... |smart-increment-requirements|
+    3. Installation .......................... |smart-increment-installation|
+    4. Quick Start ........................... |smart-increment-quickstart|
+    5. Modes ................................. |smart-increment-modes|
+       5.1 Paste ............................. |smart-increment-paste|
+       5.2 S&R Current Line .................. |smart-increment-sr-line|
+       5.3 S&R Multi-Line .................... |smart-increment-sr-multi|
+    6. Configuration ......................... |smart-increment-configuration|
+    7. Keymaps ............................... |smart-increment-keymaps|
+    8. API ................................... |smart-increment-api|
+    9. Behavior Details ...................... |smart-increment-behavior|
+   10. FAQ ................................... |smart-increment-faq|
+
+==============================================================================
+1. INTRODUCTION                               *smart-increment-introduction*
+
+smart-increment.nvim is a Neovim plugin for sequential paste and
+search-and-replace with auto-incrementing (or decrementing) numbers.
+
+Yank text containing numbers, then paste or search-and-replace repeatedly —
+each action automatically adjusts every number in the text by your chosen
+step size.
+
+Features:
+
+  - Three operating modes: paste, single-line S&R, multi-line S&R
+  - Prompted once, reused until reset or new yank
+  - Auto-reset when register content changes
+  - Preserves leading zeros (007 + 1 → 008)
+  - Handles negative numbers (-3 + 5 → 2)
+  - Multiline register support
+  - Visual mode support for scoped S&R
+  - Configurable keymaps, register, and reporting
+
+==============================================================================
+2. REQUIREMENTS                               *smart-increment-requirements*
+
+  - Neovim >= 0.7.0
+
+==============================================================================
+3. INSTALLATION                               *smart-increment-installation*
+
+Using lazy.nvim: >lua
+    {
+      "TeleVoyant/smart-increment.nvim",
+      config = function()
+        require("smart-increment").setup()
+      end,
+    }
+<
+
+Using packer.nvim: >lua
+    use {
+      "TeleVoyant/smart-increment.nvim",
+      config = function()
+        require("smart-increment").setup()
+      end,
+    }
+<
+
+==============================================================================
+4. QUICK START                                 *smart-increment-quickstart*
+
+  1. Yank some text containing numbers, e.g. `item_001`.
+  2. Press `<leader>ss` in normal mode.
+  3. Choose a mode: [1] Paste, [2] S&R current line, [3] S&R multi-line.
+  4. Choose direction: `+` or `-`.
+  5. Enter a step amount, e.g. `1`.
+  6. The plugin performs the action with the incremented value.
+  7. Press `<leader>ss` again — repeats immediately (no prompts).
+  8. Press `<leader>sS` to reset and start fresh.
+
+Example (paste mode, +1): >
+
+    yank "item_001"
+    <leader>ss  →  pastes "item_002", register now holds "item_002"
+    <leader>ss  →  pastes "item_003", register now holds "item_003"
+    <leader>ss  →  pastes "item_004", register now holds "item_004"
+<
+
+==============================================================================
+5. MODES                                           *smart-increment-modes*
+
+When first invoked, you are prompted to select a mode:
+
+    [1] Paste
+    [2] S&R current line
+    [3] S&R multi-line
+
+The mode is remembered until you reset or yank new content.
+
+------------------------------------------------------------------------------
+5.1 PASTE                                          *smart-increment-paste*
+
+Increments all numbers in the register content and pastes the result at the
+cursor position. The register is then updated so subsequent pastes continue
+the sequence.
+
+  - Supports multiline register content.
+  - Respects charwise/linewise register type.
+  - The |linewise_paste| config option can force linewise behavior.
+
+Example: >
+    Register: "local x_01 = foo()"
+    Step: +1
+
+    <leader>ss  →  pastes "local x_02 = foo()"
+    <leader>ss  →  pastes "local x_03 = foo()"
+<
+
+------------------------------------------------------------------------------
+5.2 S&R CURRENT LINE                            *smart-increment-sr-line*
+
+Searches the current cursor line for text that structurally matches the
+register content (same non-numeric skeleton, different numbers). If a match
+is found, it is replaced with the incremented register content.
+
+  - Uses a similarity score to find the best match on the line.
+  - If no match is found, the register is NOT incremented (safe to retry
+    on another line).
+  - For multiline registers, only the first line is used as the search
+    pattern; remaining lines are preserved in the register.
+
+Example: >
+    Register: "item_001"
+    Buffer line: "  local item_005 = create()"
+    Step: +1
+
+    <leader>ss  →  line becomes "  local item_002 = create()"
+    Register now holds "item_002"
+<
+
+If the cursor line has no matching pattern: >
+    Buffer line: "  something_else = true"
+    <leader>ss  →  notification: "no matching pattern found"
+    Register remains unchanged (still "item_001")
+<
+
+------------------------------------------------------------------------------
+5.3 S&R MULTI-LINE                             *smart-increment-sr-multi*
+
+Searches across a range of lines and replaces every structural match. Each
+replacement uses the next sequential value, so multiple matches are
+numbered in order.
+
+                                          *smart-increment-sr-multi-scope*
+Scope options (prompted on first invocation in normal mode):
+
+  [1] Whole file        Scans all lines top to bottom.
+  [2] From line number  Scans from a starting line, either down or up.
+
+In visual mode, the selected lines define the scope automatically (no
+scope prompt).
+
+                                         *smart-increment-sr-multi-report*
+After each operation, a concise summary is always shown: >
+    smart-increment: 15 replacement(s), 12 line(s) modified.
+<
+
+If |sr_multi_report| is enabled in config, a detailed report follows: >
+    ── smart-increment: detailed report ──
+      Scope        : whole file
+      Pattern      : item_001
+      Step         : +1
+      Lines scanned: 150
+      Lines modified: 12
+      Replacements : 15
+      Value range  : item_002 → item_016
+      Modified     : L10, 11, 13, 25, 30, 31, 42, 50, 61, 73
+<
+
+Example: >
+    Register: "item_001", step +1
+
+    line 10:  item_001 = a       →  item_002 = a
+    line 11:  item_001 = b       →  item_003 = b
+    line 12:  other_stuff             (unchanged)
+    line 13:  item_001 = c       →  item_004 = c
+<
+
+Multiple matches on a single line each get their own sequential value: >
+    Register: "x_01", step +1
+
+    line 5:   x_01 and x_01      →  x_02 and x_03
+<
+
+==============================================================================
+6. CONFIGURATION                           *smart-increment-configuration*
+
+Call `setup()` with a table of options. All fields are optional. >lua
+
+    require("smart-increment").setup({
+      register = '"',            -- register to track (default: unnamed)
+      linewise_paste = false,    -- force linewise paste in paste mode
+      sr_multi_report = false,   -- show detailed report after S&R multi
+      keymaps = {
+        increment_paste = "<leader>ss",   -- false to disable
+        reset = "<leader>sS",            -- false to disable
+      },
+    })
+<
+
+                                              *smart-increment-opt-register*
+register ~
+    Type: `string`, Default: `'"'`
+
+    The Vim register to track. The plugin reads from and writes to this
+    register. Common choices: `'"'` (unnamed/default), `'+'` (system
+    clipboard), or any single letter register.
+
+                                         *smart-increment-opt-linewise_paste*
+linewise_paste ~
+    Type: `boolean`, Default: `false`
+
+    When `true`, paste mode always inserts on a new line below the cursor,
+    regardless of the register type. When `false`, the plugin respects
+    the register's charwise/linewise type.
+
+                                       *smart-increment-opt-sr_multi_report*
+sr_multi_report ~
+    Type: `boolean`, Default: `false`
+
+    When `true`, a detailed multi-line report is shown after each S&R
+    multi-line operation, including scope, pattern, value range, lines
+    scanned, lines modified, and modified line numbers.
+
+    When `false`, only the concise one-line summary is shown: >
+        smart-increment: 15 replacement(s), 12 line(s) modified.
+<
+
+                                              *smart-increment-opt-keymaps*
+keymaps ~
+    Type: `table`, Default: `{ increment_paste = "<leader>ss", reset = "<leader>sS" }`
+
+    Set any key to `false` to disable the default binding for that action.
+    This is useful when you want to bind the functions manually. See
+    |smart-increment-keymaps| for details.
+
+==============================================================================
+7. KEYMAPS                                       *smart-increment-keymaps*
+
+Default keymaps (set via |smart-increment-opt-keymaps|):
+
+    Key              Mode      Action ~
+    `<leader>ss`      Normal    Main action (paste / S&R)
+    `<leader>ss`      Visual    S&R multi-line on selection
+    `<leader>sS`     Normal    Reset plugin state
+
+Override defaults: >lua
+    require("smart-increment").setup({
+      keymaps = {
+        increment_paste = "<leader>i",
+        reset = "<leader>ir",
+      },
+    })
+<
+
+Disable defaults and bind manually: >lua
+    local si = require("smart-increment")
+    si.setup({
+      keymaps = { increment_paste = false, reset = false },
+    })
+
+    vim.keymap.set("n", "<C-a>", si.increment_paste)
+    vim.keymap.set("v", "<C-a>", si.increment_paste_visual)
+    vim.keymap.set("n", "<C-a>r", si.reset)
+<
+
+==============================================================================
+8. API                                               *smart-increment-api*
+
+All functions are exposed on the module table returned by
+`require("smart-increment")`.
+
+                                          *smart-increment.increment_paste()*
+increment_paste() ~
+    Main entry point for normal mode. Prompts on first use (mode,
+    direction, step), then repeats without prompting on subsequent calls.
+
+                                   *smart-increment.increment_paste_visual()*
+increment_paste_visual() ~
+    Entry point for visual mode. In S&R multi-line mode, the visual
+    selection defines the search scope. In other modes, behaves the same
+    as `increment_paste()`.
+
+                                                  *smart-increment.reset()*
+reset() ~
+    Clears all plugin state. The next call to `increment_paste()` will
+    re-prompt for mode, direction, and step.
+
+                                              *smart-increment.is_active()*
+is_active() ~
+    Returns `true` if the plugin is currently configured (has state),
+    `false` otherwise. Useful for statusline integrations.
+
+                                              *smart-increment.get_state()*
+get_state() ~
+    Returns a deep copy of the current internal state table, or `nil` if
+    inactive. Intended for debugging or advanced integrations.
+
+    State fields:
+      `sign`          (number)  1 or -1
+      `amount`        (number)  step size
+      `mode`          (string)  "paste", "sr_line", or "sr_multi"
+      `register`      (string)  register name being tracked
+      `original_content` (string)  register content at first prompt
+      `last_register_content` (string)  snapshot after last operation
+
+                                         *smart-increment.get_mode_label()*
+get_mode_label() ~
+    Returns a human-readable label for the current mode, or `nil` if
+    inactive. Possible values:
+      - "Paste only"
+      - "Search & Replace (current line)"
+      - "Search & Replace (multi-line)"
+
+                                                  *smart-increment.setup()*
+setup({opts}) ~
+    Initialise the plugin. See |smart-increment-configuration| for the
+    full list of options. Can be called multiple times to reconfigure.
+
+==============================================================================
+9. BEHAVIOR DETAILS                             *smart-increment-behavior*
+
+Auto-reset ~
+    The plugin automatically resets when you yank new content into the
+    tracked register. This is detected via the |TextYankPost| autocommand.
+    After an auto-reset, the next `<leader>ss` will prompt for mode,
+    direction, and step again.
+
+Leading zeros ~
+    Numbers with leading zeros are preserved. For example, `007` + 1
+    produces `008`, not `8`. The width is determined by the original
+    number string.
+
+Negative numbers ~
+    Patterns like `-3` are recognized and handled correctly. Decrementing
+    `2` by 5 produces `-3`.
+
+Multiline registers ~
+    In paste mode, the full multiline content is incremented and pasted.
+    In S&R modes, only the first line of the register is used as the
+    search pattern. A warning is shown, and remaining lines are preserved
+    in the register.
+
+Number pattern ~
+    By default, the plugin matches integers (including negative) using the
+    Lua pattern `%-?%d+`. This can be overridden via the `number_pattern`
+    config option, though doing so is advanced and may affect S&R pattern
+    building.
+
+Similarity matching (S&R current line) ~
+    The plugin builds a structural pattern from the register content by
+    replacing numbers with flexible digit captures. It then scores all
+    matches on the cursor line by comparing their "skeleton" (text with
+    numbers stripped) against the register's skeleton. The best match
+    above a 0.5 similarity threshold is replaced.
+
+==============================================================================
+10. FAQ                                              *smart-increment-faq*
+
+Q: How do I change the step or direction without resetting?
+A: You can't — press `<leader>sS` to reset, then `<leader>ss` to
+   reconfigure with new values.
+
+Q: Can I use this with the system clipboard?
+A: Yes. Set `register = '+'` in your config: >lua
+       require("smart-increment").setup({ register = "+" })
+<
+
+Q: What happens if my register has no numbers?
+A: The plugin notifies you and does nothing. No state is created.
+
+Q: Can I use this in a macro?
+A: Yes. Once configured (after the first prompt), `<leader>ss` works
+   without any interactive prompts, so it can be recorded and replayed
+   in a macro.
+
+Q: How do I add this to my statusline?
+A: Use the API functions: >lua
+       -- Example for lualine
+       {
+         function()
+           local si = require("smart-increment")
+           if si.is_active() then
+             return "SI: " .. (si.get_mode_label() or "")
+           end
+           return ""
+         end,
+       }
+<
+
+==============================================================================
+vim:tw=78:ts=8:ft=help:norl:
